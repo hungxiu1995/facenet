@@ -40,6 +40,7 @@ import re
 from tensorflow.python.platform import gfile
 import math
 from six import iteritems
+import pickle
 
 
 def triplet_loss(anchor, positive, negative, alpha):
@@ -534,6 +535,8 @@ def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_targe
         if np.max(far_train) >= far_target:
             f = interpolate.interp1d(far_train, thresholds, kind='slinear')
             threshold = f(far_target)
+            with open("interpolation.pkl", "wb") as open_file:
+                pickle.dump(f, open_file)
         else:
             threshold = 0.0
         val[fold_idx], far[fold_idx] = calculate_val_far(threshold, dist[test_set], actual_issame[test_set])
