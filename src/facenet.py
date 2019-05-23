@@ -485,7 +485,7 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_fold
                                                                                                  dist[test_set],
                                                                                                  actual_issame[
                                                                                                      test_set])
-        test_fprs, test_fprs, accuracy[fold_idx] = calculate_accuracy(thresholds[best_threshold_index], dist[test_set],
+        test_tprs[fold_idx], test_fprs[fold_idx], accuracy[fold_idx] = calculate_accuracy(thresholds[best_threshold_index], dist[test_set],
                                                       actual_issame[test_set])
         # tpr = np.mean(tprs, 0)
         # fpr = np.mean(fprs, 0)
