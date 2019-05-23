@@ -30,6 +30,11 @@ import sys
 import os
 import argparse
 import tensorflow as tf
+
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+sess = tf.Session(config=config)
+
 import numpy as np
 import facenet
 import align.detect_face

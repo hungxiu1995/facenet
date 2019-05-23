@@ -1,19 +1,19 @@
 """Download the VGG face dataset from URLs given by http://www.robots.ox.ac.uk/~vgg/data/vgg_face/vgg_face_dataset.tar.gz
 """
 # MIT License
-# 
+#
 # Copyright (c) 2016 David Sandberg
-# 
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -33,8 +33,8 @@ import sys
 import argparse
 import os
 import socket
-from urllib2 import HTTPError, URLError
-from httplib import HTTPException
+from urllib.error import HTTPError, URLError
+from http.client import HTTPException
 
 def main(args):
     socket.setdefaulttimeout(30)
@@ -51,12 +51,13 @@ def main(args):
                 x = line.split(' ')
                 filename = x[0]
                 url = x[1]
-                box = np.rint(np.array(map(float, x[2:6])))  # x1,y1,x2,y2
+                box = np.rint(np.array(list(map(float, x[2:6]))))  # x1,y1,x2,y2
                 image_path = os.path.join(args.dataset_descriptor, dir_name, filename+'.'+args.output_format)
                 error_path = os.path.join(args.dataset_descriptor, dir_name, filename+'.err')
                 if not os.path.exists(image_path) and not os.path.exists(error_path):
                     try:
-                        img = io.imread(url, mode='RGB')
+                        print(url)
+                        img = io.imread(url, pilmode='RGB')
                     except (HTTPException, HTTPError, URLError, IOError, ValueError, IndexError, OSError) as e:
                         error_message = '{}: {}'.format(url, e)
                         save_error_message_file(error_path, error_message)
@@ -79,12 +80,12 @@ def main(args):
                         except ValueError as e:
                             error_message = '{}: {}'.format(url, e)
                             save_error_message_file(error_path, error_message)
-            
+
 def save_error_message_file(filename, error_message):
     print(error_message)
     with open(filename, "w") as textfile:
         textfile.write(error_message)
-          
+
 def to_rgb(img):
     w, h = img.shape
     ret = np.empty((w, h, 3), dtype=np.uint8)
@@ -93,7 +94,7 @@ def to_rgb(img):
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('dataset_descriptor', type=str, 
+    parser.add_argument('dataset_descriptor', type=str,
         help='Directory containing the text files with the image URLs. Image files will also be placed in this directory.')
     parser.add_argument('--output_format', type=str, help='Format of the output images', default='png', choices=['png', 'jpg'])
     parser.add_argument('--image_size', type=int,
