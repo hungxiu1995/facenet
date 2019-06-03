@@ -488,6 +488,17 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_fold
                                                                                                      test_set])
         test_tprs[fold_idx], test_fprs[fold_idx], accuracy[fold_idx] = calculate_accuracy(thresholds[best_threshold_index], dist[test_set],
                                                       actual_issame[test_set])
+        print("*" * 100)
+        print("best threshold:", thresholds[best_threshold_index])
+        print(actual_issame[test_set])
+        print("-" * 20)
+        print(dist[test_set])
+        print("-" * 20)
+        print(np.less(dist[test_set], thresholds[best_threshold_index]))
+        print("True pos:", np.sum(np.logical_and(np.less(dist[test_set], thresholds[best_threshold_index]), actual_issame[test_set])))
+
+
+        # print(thresholds[best_threshold_index])
         # tpr = np.mean(tprs, 0)
         # fpr = np.mean(fprs, 0)
 
@@ -511,6 +522,7 @@ def calculate_accuracy(threshold, dist, actual_issame):
 
 def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_target, nrof_folds=10, distance_metric=0,
                   subtract_mean=False):
+    far_target = 0.05
     assert (embeddings1.shape[0] == embeddings2.shape[0])
     assert (embeddings1.shape[1] == embeddings2.shape[1])
     nrof_pairs = min(len(actual_issame), embeddings1.shape[0])
@@ -541,6 +553,7 @@ def calculate_val(thresholds, embeddings1, embeddings2, actual_issame, far_targe
             threshold = 0.0
         val[fold_idx], far[fold_idx] = calculate_val_far(threshold, dist[test_set], actual_issame[test_set])
 
+        # print(threshold)
     val_mean = np.mean(val)
     far_mean = np.mean(far)
     val_std = np.std(val)
