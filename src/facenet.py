@@ -488,14 +488,14 @@ def calculate_roc(thresholds, embeddings1, embeddings2, actual_issame, nrof_fold
                                                                                                      test_set])
         test_tprs[fold_idx], test_fprs[fold_idx], accuracy[fold_idx] = calculate_accuracy(thresholds[best_threshold_index], dist[test_set],
                                                       actual_issame[test_set])
-        print("*" * 100)
-        print("best threshold:", thresholds[best_threshold_index])
-        print(actual_issame[test_set])
-        print("-" * 20)
-        print(dist[test_set])
-        print("-" * 20)
-        print(np.less(dist[test_set], thresholds[best_threshold_index]))
-        print("True pos:", np.sum(np.logical_and(np.less(dist[test_set], thresholds[best_threshold_index]), actual_issame[test_set])))
+        # print("*" * 100)
+        # print("best threshold:", thresholds[best_threshold_index])
+        # print(actual_issame[test_set])
+        # print("-" * 20)
+        # print(dist[test_set])
+        # print("-" * 20)
+        # print(np.less(dist[test_set], thresholds[best_threshold_index]))
+        # print("True pos:", np.sum(np.logical_and(np.less(dist[test_set], thresholds[best_threshold_index]), actual_issame[test_set])))
 
 
         # print(thresholds[best_threshold_index])
