@@ -32,6 +32,7 @@ import os.path
 import time
 import sys
 import tensorflow as tf
+from tqdm import tqdm
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -140,7 +141,7 @@ def main(args):
         embeddings = tf.nn.l2_normalize(prelogits, 1, 1e-10, name='embeddings')
         # Split embeddings into anchor, positive and negative and calculate triplet loss
         anchor, positive, negative = tf.unstack(tf.reshape(embeddings, [-1, 3, args.embedding_size]), 3, 1)
-        triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha)
+        triplet_loss = facenet.triplet_loss(anchor, positive, negative, args.alpha_2)
 
         learning_rate = tf.train.exponential_decay(learning_rate_placeholder, global_step,
                                                    args.learning_rate_decay_epochs * args.epoch_size,
@@ -238,7 +239,8 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
         # Select triplets based on the embeddings
         print('Selecting suitable triplets for training')
         triplets, nrof_random_negs, nrof_triplets = select_triplets(emb_array, num_per_class,
-                                                                    image_paths, args.people_per_batch, args.alpha,
+                                                                    image_paths, args.people_per_batch, args.alpha_1,
+                                                                    args.alpha_2, args.neg_triplet_ratio,
                                                                     args.same_series_percentage)
         selection_time = time.time() - start_time
         print('(nrof_random_negs, nrof_triplets) = (%d, %d): time=%.3f seconds' %
@@ -284,24 +286,23 @@ def train(args, sess, dataset, epoch, image_paths_placeholder, labels_placeholde
 def check_issame_series(p1, p2):
     s1 = p1.split("/")[-1]
     s2 = p2.split("/")[-1]
-
     s1 = s1[0:s1.rfind("-")]
     s2 = s2[0:s2.rfind("-")]
-
     return s1 == s2
 
 
-def select_triplets(embeddings, nrof_images_per_class, image_paths, people_per_batch, alpha, same_series_percentage):
+def check_issame_volumes(p1, p2):
+    s1 = p1.split("/")[-1]
+    s2 = p2.split("/")[-1]
+    s1 = s1[0:s1.rfind("_")]
+    s2 = s2[0:s2.rfind("_")]
+    return s1 == s2
+
+
+def select_triplets(embeddings, nrof_images_per_class, image_paths, people_per_batch, alpha_1, alpha_2,
+                    neg_triplet_ratio, same_series_percentage):
     """ Select the triplets for training
     """
-
-    # print(embeddings.shape)
-    # exit()
-
-    trip_idx = 0
-    emb_start_idx = 0
-    num_trips = 0
-
     # VGG Face: Choosing good triplets is crucial and should strike a balance between
     #  selecting informative (i.e. challenging) examples and swamping training with examples that
     #  are too hard. This is achieve by extending each pair (a, p) to a triplet (a, p, n) by sampling
@@ -309,6 +310,46 @@ def select_triplets(embeddings, nrof_images_per_class, image_paths, people_per_b
     #  latter is a form of hard-negative mining, but it is not as aggressive (and much cheaper) than
     #  choosing the maximally violating example, as often done in structured output learning.
 
+    # --------------------
+
+    # print(image_paths)
+    # print(embeddings.shape)
+    # print(len(nrof_images_per_class))
+    # print(nrof_images_per_class)
+    # print(sum(nrof_images_per_class))
+    # print(people_per_batch)
+    # exit()
+
+    emb_start_idx = 0
+    a_ns_nv_triplets = []
+
+    for i in range(people_per_batch):
+        nrof_images = int(nrof_images_per_class[i])
+        for j in range(1, nrof_images):
+            a_idx = emb_start_idx + j - 1
+            neg_dists_sqr = np.sum(np.square(embeddings[a_idx] - embeddings), 1)
+            all_possible_series_pos = [path for path in image_paths if
+                                       check_issame_series(path, image_paths[a_idx]) and path != image_paths[a_idx]]
+            np.random.shuffle(all_possible_series_pos)
+            all_possible_series_pos = all_possible_series_pos[0:10]
+            for ns_path in all_possible_series_pos:  # For every possible series-negatives
+                ns_idx = image_paths.index(ns_path)
+                ns_dist_sqr = np.sum(np.square(embeddings[a_idx] - embeddings))
+                neg_dists_sqr[emb_start_idx: emb_start_idx + nrof_images] = np.NaN
+                all_neg = np.where(neg_dists_sqr - ns_dist_sqr < alpha_1)[0]
+                nrof_random_negs = all_neg.shape[0]
+                if nrof_random_negs > 0:
+                    rnd_idx = np.random.randint(nrof_random_negs)
+                    nv_idx = all_neg[rnd_idx]
+
+                    if not check_issame_series(image_paths[a_idx], image_paths[nv_idx]) and not check_issame_volumes(
+                            image_paths[a_idx], image_paths[ns_idx]):
+                        a_ns_nv_triplets.append((image_paths[a_idx], image_paths[ns_idx], image_paths[nv_idx]))
+    np.random.shuffle(a_ns_nv_triplets)
+    # --------------------
+    trip_idx = 0
+    emb_start_idx = 0
+    num_trips = 0
     same_series_triplets = []
     diff_series_triplets = []
 
@@ -322,44 +363,37 @@ def select_triplets(embeddings, nrof_images_per_class, image_paths, people_per_b
                 pos_dist_sqr = np.sum(np.square(embeddings[a_idx] - embeddings[p_idx]))
                 neg_dists_sqr[emb_start_idx:emb_start_idx + nrof_images] = np.NaN
                 # all_neg = np.where(np.logical_and(neg_dists_sqr-pos_dist_sqr<alpha, pos_dist_sqr<neg_dists_sqr))[0]  # FaceNet selection
-                all_neg = np.where(neg_dists_sqr - pos_dist_sqr < alpha)[0]  # VGG Face selecction
+                all_neg = np.where(neg_dists_sqr - pos_dist_sqr < alpha_2)[0]  # VGG Face selecction
                 nrof_random_negs = all_neg.shape[0]
                 if nrof_random_negs > 0:
                     rnd_idx = np.random.randint(nrof_random_negs)
                     n_idx = all_neg[rnd_idx]
-
                     if check_issame_series(image_paths[a_idx], image_paths[n_idx]):
                         same_series_triplets.append((image_paths[a_idx], image_paths[p_idx], image_paths[n_idx]))
-                        # print('Triplet %d: (%d, %d, %d), pos_dist=%2.6f, neg_dist=%2.6f (%d, %d, %d, %d, %d)' %
-                        #    (trip_idx, a_idx, p_idx, n_idx, pos_dist_sqr, neg_dists_sqr[n_idx], nrof_random_negs, rnd_idx, i, j, emb_start_idx))
                         trip_idx += 1
-
                     if not check_issame_series(image_paths[a_idx], image_paths[n_idx]):
                         diff_series_triplets.append((image_paths[a_idx], image_paths[p_idx], image_paths[n_idx]))
                         trip_idx += 1
-
                 num_trips += 1
-
         emb_start_idx += nrof_images
-
     np.random.shuffle(same_series_triplets)
     np.random.shuffle(diff_series_triplets)
-
     same_diff_rate = same_series_percentage / (1 - same_series_percentage)
     total_triplets = len(same_series_triplets) + len(diff_series_triplets)
-
     s, d = 0, 0
     for i in range(total_triplets, 0, -1):
-        diff =  int(i / (1 + same_diff_rate))
+        diff = int(i / (1 + same_diff_rate))
         same = i - diff
         if diff < len(diff_series_triplets) and same < len(same_series_triplets):
             s = same
             d = diff
             break
-
     same_series_triplets = same_series_triplets[0:s]
     diff_series_triplets = diff_series_triplets[0:d]
     triplets = same_series_triplets + diff_series_triplets
+    # ----------------
+    triplets.extend(a_ns_nv_triplets[0: int(len(triplets) * neg_triplet_ratio)])
+    np.random.shuffle(triplets)
 
     # a = []
     # for i in triplets:
@@ -513,8 +547,11 @@ def parse_arguments(argv):
                         help='Number of images per person.', default=40)
     parser.add_argument('--epoch_size', type=int,
                         help='Number of batches per epoch.', default=1000)
-    parser.add_argument('--alpha', type=float,
+    parser.add_argument('--alpha_1', type=float,
                         help='Positive to negative triplet distance margin.', default=0.2)
+    parser.add_argument('--alpha_2', type=float,
+                        help='Positive to negative triplet distance margin.', default=0.2)
+
     parser.add_argument('--embedding_size', type=int,
                         help='Dimensionality of the embedding.', default=128)
     parser.add_argument('--random_crop',
@@ -545,6 +582,8 @@ def parse_arguments(argv):
                         default='data/learning_rate_schedule.txt')
 
     parser.add_argument('--same_series_percentage', type=float,
+                        help='', default=0.5)
+    parser.add_argument('--neg_triplet_ratio', type=float,
                         help='', default=0.5)
 
     # Parameters for validation on LFW
